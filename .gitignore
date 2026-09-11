@@ -53,3 +53,6 @@ next-env.d.ts
 .env
 .env.local
 .env*.local
+
+# Vercel CLI link metadata (project and team ids)
+.vercel
