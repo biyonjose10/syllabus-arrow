@@ -3,6 +3,45 @@
 AI Builders Hackathon 2026. One cash prize: **$4,000, Best SaaS Product**.
 Deadline **Sept 15, 11:00 PM EDT**. Target submission **Sept 15, 6:00 PM IST**.
 
+**Live:** https://syllabus-arrow.vercel.app
+
+---
+
+## Start here — where we stopped (end of Sept 11)
+
+**Gate 0 is not passed yet.** The app is deployed but every page returns 500 because there is no
+database. Code, tests and CI are green; the blockers are two account steps only a human can do.
+
+### Next, in order
+
+1. **Human:** accept Neon's marketplace terms in the browser (Vercel → the project's team →
+   Integrations → Neon). The CLI cannot do this step.
+2. Install free Neon: `npx vercel integration add neon --plan free --name syllabus-arrow-db --no-env-pull`.
+   Pull env into a **separate** file (`npx vercel env pull .env.vercel.local`), copy the database URLs
+   into `.env.local`, run `npm run db:push`, then push to `main` to redeploy.
+3. **Human:** create a Gmail app password (2-Step Verification required). Set `GMAIL_USER` and
+   `GMAIL_APP_PASSWORD` in Vercel for production and preview.
+4. **Gate 0 phone test** on the live URL: sign up → verification email arrives → dashboard shows
+   "0 of 1 courses" → adding a second course shows the Free limit → a second account sees nothing of
+   the first.
+5. Remaining setup: Vercel Blob (private), Inngest integration, Google OAuth client (publish the app),
+   Polar sandbox product "Pro" $8/month + access token, Tin Computer credits, Devpost draft.
+6. **Gates 1+2:** model provider with a fallback chain + Postgres cache, Blob upload behind the plan
+   limit, Inngest ingest job with real step progress, validated graph persisted, React Flow graph page,
+   scheduler, honest no-dates / wrong-format states.
+
+The schedule has slipped about half a day: finishing Gate 0 and Gates 1+2 both fall on Sept 12.
+
+### Gates
+
+| Gate | Date | Pass | Status |
+|---|---|---|---|
+| 0 | Sept 11 | live URL, email sign-up + verification, empty dashboard, tenancy isolation, answer-key spike | code done, spike PASS, **blocked on Neon + Gmail** |
+| 1+2 | Sept 12 | upload → job → graph rendered → schedule; honest no-dates / wrong-format states | not started |
+| 3 | Sept 13 | checks → BKT mastery → "you're wrong about yourself"; past-paper exam weighting | not started |
+| 4 | Sept 14 | limits enforced, pricing, Polar checkout, onboarding, Google sign-in, demo button | not started |
+| 5 | Sept 15 | deck, video, README, Devpost submitted by 6 PM IST | not started |
+
 ---
 
 ## Day 1 — Sept 11
@@ -44,61 +83,25 @@ program scheme. No calendar ordering could produce it. It is the demo.
 
 **Decision: single-pass extraction holds. The two-pass fallback is not needed.**
 
-### Incidental findings
-
+Incidental findings:
 - The NIT document yielded **0 assessments** — it is a program scheme with no
-  dates anywhere. This is a real "course with no dates" fixture for the honest
-  empty state, rather than a synthetic one we invent on Day 4.
-- Gemini reads PDFs natively via `inlineData`, verified against the installed
-  SDK types. No `pdf-parse` / OCR branch needed — which removes a dependency and
-  handles scanned syllabi for free.
-- `C:\Users\biyon` is itself a git repo. This project has its own repo so the two
-  never entangle.
+  dates anywhere. A real "course with no dates" fixture for the honest empty state.
+- Gemini reads PDFs natively via `inlineData`. No `pdf-parse` / OCR branch needed,
+  which also handles scanned syllabi.
 
-### Done
-- [x] Spike written, cached, and passing on two real documents
-- [x] Next 16.3.4 + TS + Tailwind v4 scaffolded
-- [x] `@google/genai` + `tsx` installed; SDK surface verified by introspection
-- [x] Disk cache built on Day 1 rather than Day 2 — re-runs cost zero tokens
-- [x] Standalone git repo, `.gitignore` covering `.cache/` and every `.env` shape
-
-### Open
-- [ ] ⏰ Tin Computer credits ($299, first 100 teams)
-- [ ] Neon Postgres → `DATABASE_URL`
-- [ ] New Google Cloud project → OAuth client + a **new** Gemini key
-- [ ] Stripe test mode → Product/Price
-- [ ] Prisma schema, Auth.js, tenancy, deploy to Vercel
-
-### Plan approved (session 2, Sept 11)
-
-Full plan: `~/.claude/plans/you-are-my-technical-toasty-reddy.md`.
+### Plan approved
 
 **Decisions:** Polar sandbox (Stripe is invite-only for new Indian businesses) ·
 Gmail SMTP app password for verification email (Resend needs an owned domain to
-reach strangers) · new free-tier Gemini key in a new GCP project, no billing ·
-cut slides before past papers · demo course MIT 18.06 · Free + Pro $8/mo ·
-"Try the demo course" + Continue with Google on the landing page.
+reach strangers) · cut slides before past papers · demo course MIT 18.06 ·
+Free (1 course, 10 documents, 20 checks/day) + Pro $8/mo · "Try the demo course"
+and Continue with Google on the landing page. Gates 1 and 2 merged, because one
+extraction call already returns concepts, edges and assessments.
 
-**Gates re-dated** (we started a day late; one extraction call already returns
-concepts, edges and assessments, so Gates 1 and 2 merge):
+### Gate 0 — code
 
-| Gate | Date | Pass |
-|---|---|---|
-| 0 | Sept 11 | live URL, email sign-up + verification, empty dashboard, tenancy isolation, answer-key spike passes |
-| 1+2 | Sept 12 | upload → job → graph rendered → schedule; honest no-dates / wrong-format states |
-| 3 | Sept 13 | checks → BKT mastery → "you're wrong about yourself"; past-paper exam weighting |
-| 4 | Sept 14 | limits enforced, pricing, Polar checkout, onboarding, Google sign-in, demo button |
-| 5 | Sept 15 | deck, video, README, Devpost submitted by 6 PM IST |
+Green: `verify` 3/3 invariants · `test` 14/14 · `typecheck` · `lint` · `build` · CI on GitHub.
 
-**Env-var trap:** the Windows user environment already has `GEMINI_API_KEY`
-(the shared paid key), and Next never lets `.env.local` override an existing
-process variable. The app therefore reads `SYLLABUS_GEMINI_KEY` only.
-
-### Gate 0 — code complete locally, waiting on accounts
-
-Green locally: `verify` 3/3 invariants · `test` 14/14 · `typecheck` · `lint` · `build` (7 routes + proxy).
-
-Built:
 - Better Auth: email + password with **required** verification over Gmail SMTP; Google sign-in shown
   only when its credentials exist; sign-in tells "wrong password" apart from "not confirmed yet" and
   offers a resend.
@@ -110,14 +113,11 @@ Built:
 - Full product schema (graph, assessments, past papers, BKT mastery, self-reports, schedule, billing,
   usage, model cache) with `workspaceId` on every product table.
 - `scripts/verify.mts`: tenancy / no model in decisions / no `GEMINI_API_KEY`. It caught
-  `spike-graph.ts` still reading the paid key — fixed.
-- CI: verify → test → typecheck → lint → build.
+  `spike-graph.ts` still reading that variable — fixed.
 
-Found on the way:
-- `next/font/google` downloads fonts at build time and failed here → system font stack.
-- Better Auth touches the Prisma client at import, so `next build` logs `DATABASE_URL is not set`
-  on a machine with no database. Harmless; CI sets a placeholder URL.
-- `vitest@5` needs `@types/node@22` (the scaffold pinned 20).
+Found on the way: `next/font/google` fails the build offline → system fonts · Better Auth touches the
+Prisma client at import, so a DB-less build logs a harmless `DATABASE_URL is not set` · `vitest@5`
+needs `@types/node@22`.
 
 ### Spike: can the model write practice questions with correct keys? — **PASS**
 
@@ -136,22 +136,19 @@ fundamental subspaces, a 2×2 and a block inverse) — all ten keys correct. Cav
 were the same model, so errors could correlate; the product keeps the blind double-solve AND a
 "this question is wrong" flag that removes a question from mastery.
 
-**Model availability is now a product requirement.** On the free key the same hour:
+**Model availability is a product requirement.** On the free key the same hour:
 - `gemini-3.8-flash` and `gemini-3.7-flash`: 503 "high demand" on every real-sized request (a one-word
   request to 3.7 still succeeded — load shedding, not refusal), and 3.7 then hit **429 quota exhausted**.
-- `gemini-3.6-flash`: served both calls (109s generate, 44s solve). `gemini-3.5-flash` also answered a probe.
+- `gemini-3.6-flash`: served both calls (109s generate, 44s solve). `gemini-3.5-flash` answered a probe.
 - `gemini-2.5-flash`: refused outright on this key.
 
-So the `LlmProvider` gets a model chain with backoff that honours Google's `retryDelay`, and records
-which model answered. A single hard-coded model would have failed the first live upload.
+So the model provider gets a chain with backoff that honours Google's `retryDelay` and records which
+model answered.
 
-Blocked on the user: checklist 1–13 (Tin credits, Devpost draft, GCP project + free Gemini key,
-Gmail app password, Vercel + Neon + Blob + Inngest, Google client, Polar). Then: `db push` to Neon,
-deploy, answer-key spike, phone test.
+### Deployed
 
-### Note on the API key
-The spike ran on the `GEMINI_API_KEY` already present in the user's User-scope
-environment variables — the shared FairLens/KSP/Crucible key, not a new one.
-Three calls, ~16k in / ~7k out total. It must be replaced with a key from a new
-Google Cloud project; the shared key has a service-account binding and is never
-to be deleted or rotated in place.
+- Vercel project `syllabus-arrow`, Git-connected (every push to `main` deploys), Deployment Protection off.
+- Env vars set: `BETTER_AUTH_SECRET`, `SYLLABUS_GEMINI_KEY` (production + preview), `BETTER_AUTH_URL`
+  (production).
+- `vercel link` appended a `.env*` rule to `.gitignore` that re-ignored `.env.example` — removed.
+- Neon install stopped at `integration_terms_acceptance_required` → see "Start here".
