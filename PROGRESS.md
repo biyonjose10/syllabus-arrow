@@ -119,6 +119,32 @@ Found on the way:
   on a machine with no database. Harmless; CI sets a placeholder URL.
 - `vitest@5` needs `@types/node@22` (the scaffold pinned 20).
 
+### Spike: can the model write practice questions with correct keys? — **PASS**
+
+`scripts/spike-checks.ts` on the cached MIT 18.06 graph: 4 questions × the 8 concepts with the largest
+downstream sets, options shuffled in code, a second call answers blind.
+
+| Check | Result |
+|---|---|
+| generated / malformed | 32 / 0 |
+| concept ids valid | 32 / 32 |
+| blind agreement | **32 / 32 (100%)** |
+| top-5 coverage | every concept kept 4 |
+
+The 10 printed questions were checked by hand (Gaussian elimination, RREF, inconsistency in k, the four
+fundamental subspaces, a 2×2 and a block inverse) — all ten keys correct. Caveat: generator and solver
+were the same model, so errors could correlate; the product keeps the blind double-solve AND a
+"this question is wrong" flag that removes a question from mastery.
+
+**Model availability is now a product requirement.** On the free key the same hour:
+- `gemini-3.8-flash` and `gemini-3.7-flash`: 503 "high demand" on every real-sized request (a one-word
+  request to 3.7 still succeeded — load shedding, not refusal), and 3.7 then hit **429 quota exhausted**.
+- `gemini-3.6-flash`: served both calls (109s generate, 44s solve). `gemini-3.5-flash` also answered a probe.
+- `gemini-2.5-flash`: refused outright on this key.
+
+So the `LlmProvider` gets a model chain with backoff that honours Google's `retryDelay`, and records
+which model answered. A single hard-coded model would have failed the first live upload.
+
 Blocked on the user: checklist 1–13 (Tin credits, Devpost draft, GCP project + free Gemini key,
 Gmail app password, Vercel + Neon + Blob + Inngest, Google client, Polar). Then: `db push` to Neon,
 deploy, answer-key spike, phone test.
