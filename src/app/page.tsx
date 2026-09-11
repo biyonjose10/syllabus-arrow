@@ -1,69 +1,65 @@
-import Image from "next/image";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-export default function Home() {
+import { buttonClass, Wordmark } from "@/components/ui";
+import { getSession } from "@/lib/session";
+
+const STEPS = [
+  {
+    title: "Upload the syllabus",
+    body: "The PDF you got in week one — scanned, tabled, messy. It is read whole, layout and all.",
+  },
+  {
+    title: "Get the prerequisite map",
+    body: "Not a topic list. Which ideas you cannot learn without which, with the reason for every arrow.",
+  },
+  {
+    title: "Earn every tick",
+    body: "Practice checks update what you actually know — and say so when it disagrees with what you marked done.",
+  },
+];
+
+export default async function Home() {
+  if (await getSession()) redirect("/dashboard");
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 sm:px-8">
+      <header className="flex h-16 items-center justify-between">
+        <Wordmark className="text-lg" />
+        <Link href="/sign-in" className={buttonClass("ghost")}>
+          Sign in
+        </Link>
+      </header>
+
+      <section className="pb-16 pt-12 sm:pt-20">
+        <p className="mb-4 text-sm font-medium text-accent">For students with an exam date</p>
+        <h1 className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
+          Every student gets a syllabus in week one and a panic in week eleven.
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2">
+          Syllabus→ turns your course documents into a map of what depends on what, a schedule that works back
+          from your exam, and practice that knows what you can&apos;t do yet — including the things you think you can.
+        </p>
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <Link href="/sign-up" className={buttonClass("primary", "h-12 px-6 text-base")}>
+            Start free
+          </Link>
+          <Link href="/sign-in" className={buttonClass("secondary", "h-12 px-6 text-base")}>
+            I have an account
+          </Link>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        <p className="mt-3 text-sm text-ink-3">Free for one course. No card needed.</p>
+      </section>
+
+      <section className="grid gap-4 border-t border-line py-12 sm:grid-cols-3">
+        {STEPS.map((step, i) => (
+          <div key={step.title} className="flex flex-col gap-2">
+            <span className="font-mono text-sm text-ink-3">0{i + 1}</span>
+            <h2 className="text-base font-semibold">{step.title}</h2>
+            <p className="text-sm leading-relaxed text-ink-2">{step.body}</p>
+          </div>
+        ))}
+      </section>
+    </main>
   );
 }

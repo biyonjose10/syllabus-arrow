@@ -1,0 +1,443 @@
+// Syllabus→ — relational schema.
+//
+// Two halves:
+//   1. Better Auth's four tables, field-for-field from
+//      node_modules/better-auth/node_modules/@better-auth/core/dist/db/get-tables.mjs
+//   2. The product. EVERY product table carries `workspaceId`, and only
+//      src/lib/tenancy.ts may query them. That column is the tenancy boundary;
+//      a query without it is a data leak between students.
+//
+// The model's output is never stored as prose: concepts, edges, assessments
+// and questions are rows, so the schedule, mastery model and insights are
+// ordinary queries over structure.
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ── Better Auth ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String       @id
+  name          String
+  email         String       @unique
+  emailVerified Boolean      @default(false)
+  image         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  memberships   Membership[]
+  attempts      Attempt[]
+  mastery       MasteryState[]
+  selfReports   SelfReport[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ── Tenancy ─────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum Role {
+  OWNER
+  VIEWER
+}
+
+/// One per user, created with the account. The demo workspace is the only one
+/// with `isDemo`, and every write path refuses it.
+model Workspace {
+  id              String         @id @default(cuid())
+  name            String
+  plan            Plan           @default(FREE)
+  isDemo          Boolean        @default(false)
+  polarCustomerId String?        @unique
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  memberships     Membership[]
+  courses         Course[]
+  documents       Document[]
+  jobs            IngestJob[]
+  concepts        Concept[]
+  edges           Edge[]
+  assessments     Assessment[]
+  assessmentLinks AssessmentConcept[]
+  examQuestions   ExamQuestion[]
+  checkQuestions  CheckQuestion[]
+  attempts        Attempt[]
+  mastery         MasteryState[]
+  selfReports     SelfReport[]
+  schedule        ScheduleItem[]
+  subscription    Subscription?
+  usage           UsageCounter[]
+}
+
+model Membership {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        Role      @default(OWNER)
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+// ── Courses and ingestion ───────────────────────────────────────────────────
+
+enum CourseStatus {
+  EMPTY
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Course {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title         String
+  status        CourseStatus   @default(EMPTY)
+  /// Set by the student when the syllabus has no usable dates.
+  examDate      DateTime?
+  minutesPerDay Int            @default(60)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  documents     Document[]
+  concepts      Concept[]
+  edges         Edge[]
+  assessments   Assessment[]
+  examQuestions ExamQuestion[]
+  checks        CheckQuestion[]
+  schedule      ScheduleItem[]
+
+  @@index([workspaceId])
+}
+
+enum DocumentKind {
+  SYLLABUS
+  PAST_PAPER
+}
+
+model Document {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId      String
+  course        Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  kind          DocumentKind
+  filename      String
+  blobPathname  String
+  mimeType      String
+  sizeBytes     Int
+  /// Content hash — the LLM cache key starts here.
+  sha256        String
+  createdAt     DateTime       @default(now())
+  jobs          IngestJob[]
+  examQuestions ExamQuestion[]
+
+  @@index([workspaceId, courseId])
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+/// One row per ingestion run. The processing screen polls this; each Inngest
+/// step writes `step` / `stepIndex` as it starts, so progress is real.
+model IngestJob {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  documentId   String
+  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  status       JobStatus @default(QUEUED)
+  step         String?
+  stepIndex    Int       @default(0)
+  stepCount    Int
+  /// Stable, user-facing failure reason: NOT_A_SYLLABUS, UNREADABLE, NO_DATES, ...
+  errorCode    String?
+  errorMessage String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([workspaceId, documentId])
+}
+
+// ── The graph ───────────────────────────────────────────────────────────────
+
+model Concept {
+  id          String              @id @default(cuid())
+  workspaceId String
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// The model's stable id ("eigenvalues-eigenvectors"); edges refer to it at
+  /// extraction time and are resolved to row ids before insert.
+  slug        String
+  name        String
+  summary     String
+  sourceRef   String
+  createdAt   DateTime            @default(now())
+  outgoing    Edge[]              @relation("EdgeFrom")
+  incoming    Edge[]              @relation("EdgeTo")
+  assessments AssessmentConcept[]
+  examQs      ExamQuestion[]
+  checks      CheckQuestion[]
+  mastery     MasteryState[]
+  selfReports SelfReport[]
+  schedule    ScheduleItem[]
+
+  @@unique([courseId, slug])
+  @@index([workspaceId])
+}
+
+/// `from` is the prerequisite; `to` is not learnable without it.
+model Edge {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  fromId      String
+  from        Concept   @relation("EdgeFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId        String
+  to          Concept   @relation("EdgeTo", fields: [toId], references: [id], onDelete: Cascade)
+  rationale   String
+
+  @@unique([fromId, toId])
+  @@index([workspaceId, courseId])
+}
+
+model Assessment {
+  id          String              @id @default(cuid())
+  workspaceId String
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  /// Verbatim from the document: "Week 6", "TBA", "15 Oct".
+  dueDateRaw  String?
+  /// Parsed in code, never by the model. Null when the raw value is not a date.
+  dueDate     DateTime?
+  weight      Float?
+  concepts    AssessmentConcept[]
+
+  @@index([workspaceId, courseId])
+}
+
+model AssessmentConcept {
+  workspaceId  String
+  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  conceptId    String
+  concept      Concept    @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@id([assessmentId, conceptId])
+  @@index([workspaceId])
+}
+
+/// A question from a real past paper, mapped onto the graph. Pro only.
+model ExamQuestion {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  documentId  String
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  conceptId   String
+  concept     Concept   @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  text        String
+  marks       Float?
+
+  @@index([workspaceId, courseId])
+}
+
+// ── Mastery ─────────────────────────────────────────────────────────────────
+
+/// A practice question. Only questions whose key survived the blind second
+/// solve are `verified`; only verified, unflagged questions count toward mastery.
+model CheckQuestion {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  conceptId   String
+  concept     Concept   @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  stem        String
+  options     String[]
+  answerIndex Int
+  explanation String
+  verified    Boolean   @default(false)
+  flaggedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  attempts    Attempt[]
+
+  @@index([workspaceId, conceptId])
+}
+
+model Attempt {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    CheckQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  chosenIndex Int
+  correct     Boolean
+  createdAt   DateTime      @default(now())
+
+  @@index([workspaceId, userId])
+}
+
+/// Bayesian Knowledge Tracing state per student per concept.
+model MasteryState {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conceptId   String
+  concept     Concept   @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  pKnown      Float
+  attempts    Int       @default(0)
+  correct     Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, conceptId])
+  @@index([workspaceId])
+}
+
+/// "I've done this." The claim the insights page is allowed to contradict.
+model SelfReport {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conceptId    String
+  concept      Concept   @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  markedDoneAt DateTime  @default(now())
+
+  @@unique([userId, conceptId])
+  @@index([workspaceId])
+}
+
+enum ScheduleKind {
+  LEARN
+  REVIEW
+}
+
+model ScheduleItem {
+  id          String       @id @default(cuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  conceptId   String
+  concept     Concept      @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  date        DateTime     @db.Date
+  kind        ScheduleKind
+  minutes     Int
+
+  @@index([workspaceId, courseId, date])
+}
+
+// ── Billing and usage ───────────────────────────────────────────────────────
+
+model Subscription {
+  id                  String    @id @default(cuid())
+  workspaceId         String    @unique
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  polarSubscriptionId String    @unique
+  status              String
+  currentPeriodEnd    DateTime?
+  updatedAt           DateTime  @updatedAt
+}
+
+/// Counters for limits that reset (e.g. key "checks:2026-09-11").
+model UsageCounter {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key         String
+  count       Int       @default(0)
+
+  @@unique([workspaceId, key])
+}
+
+/// Content-addressed model responses: key = sha256(input bytes, model, prompt,
+/// schema). Deliberately not tenant-scoped — the same document yields the same
+/// extraction, and a hit reveals nothing a second uploader does not already hold.
+model LlmCache {
+  key          String   @id
+  model        String
+  raw          String
+  promptTokens Int?
+  outputTokens Int?
+  createdAt    DateTime @default(now())
+}

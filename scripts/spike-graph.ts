@@ -274,9 +274,16 @@ async function main() {
   if (hit) {
     ({ raw, meta } = hit);
   } else {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Not GEMINI_API_KEY: on this machine that name is inherited from the user
+    // environment and holds a different, paid key that no env file can override.
+    try {
+      process.loadEnvFile(".env.local");
+    } catch {
+      // no file yet — the check below explains what to do
+    }
+    const apiKey = process.env.SYLLABUS_GEMINI_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is not set. Put it in .env.local and re-run.");
+      console.error("SYLLABUS_GEMINI_KEY is not set. Put the free-tier key in .env.local and re-run.");
       process.exit(1);
     }
 

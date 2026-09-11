@@ -94,6 +94,35 @@ concepts, edges and assessments, so Gates 1 and 2 merge):
 (the shared paid key), and Next never lets `.env.local` override an existing
 process variable. The app therefore reads `SYLLABUS_GEMINI_KEY` only.
 
+### Gate 0 — code complete locally, waiting on accounts
+
+Green locally: `verify` 3/3 invariants · `test` 14/14 · `typecheck` · `lint` · `build` (7 routes + proxy).
+
+Built:
+- Better Auth: email + password with **required** verification over Gmail SMTP; Google sign-in shown
+  only when its credentials exist; sign-in tells "wrong password" apart from "not confirmed yet" and
+  offers a resend.
+- A workspace per user from the user-create hook, self-healed by `requireWorkspace()`.
+- `src/lib/tenancy.ts` is the only holder of the raw Prisma client; branded `WorkspaceContext`;
+  other workspaces' records read as `null` → 404.
+- `src/lib/plans.ts` — one plan table for pricing and enforcement. Dashboard shows "0 of 1 courses";
+  a second course on Free returns the limit message.
+- Full product schema (graph, assessments, past papers, BKT mastery, self-reports, schedule, billing,
+  usage, model cache) with `workspaceId` on every product table.
+- `scripts/verify.mts`: tenancy / no model in decisions / no `GEMINI_API_KEY`. It caught
+  `spike-graph.ts` still reading the paid key — fixed.
+- CI: verify → test → typecheck → lint → build.
+
+Found on the way:
+- `next/font/google` downloads fonts at build time and failed here → system font stack.
+- Better Auth touches the Prisma client at import, so `next build` logs `DATABASE_URL is not set`
+  on a machine with no database. Harmless; CI sets a placeholder URL.
+- `vitest@5` needs `@types/node@22` (the scaffold pinned 20).
+
+Blocked on the user: checklist 1–13 (Tin credits, Devpost draft, GCP project + free Gemini key,
+Gmail app password, Vercel + Neon + Blob + Inngest, Google client, Polar). Then: `db push` to Neon,
+deploy, answer-key spike, phone test.
+
 ### Note on the API key
 The spike ran on the `GEMINI_API_KEY` already present in the user's User-scope
 environment variables — the shared FairLens/KSP/Crucible key, not a new one.
