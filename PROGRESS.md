@@ -69,6 +69,31 @@ program scheme. No calendar ordering could produce it. It is the demo.
 - [ ] Stripe test mode → Product/Price
 - [ ] Prisma schema, Auth.js, tenancy, deploy to Vercel
 
+### Plan approved (session 2, Sept 11)
+
+Full plan: `~/.claude/plans/you-are-my-technical-toasty-reddy.md`.
+
+**Decisions:** Polar sandbox (Stripe is invite-only for new Indian businesses) ·
+Gmail SMTP app password for verification email (Resend needs an owned domain to
+reach strangers) · new free-tier Gemini key in a new GCP project, no billing ·
+cut slides before past papers · demo course MIT 18.06 · Free + Pro $8/mo ·
+"Try the demo course" + Continue with Google on the landing page.
+
+**Gates re-dated** (we started a day late; one extraction call already returns
+concepts, edges and assessments, so Gates 1 and 2 merge):
+
+| Gate | Date | Pass |
+|---|---|---|
+| 0 | Sept 11 | live URL, email sign-up + verification, empty dashboard, tenancy isolation, answer-key spike passes |
+| 1+2 | Sept 12 | upload → job → graph rendered → schedule; honest no-dates / wrong-format states |
+| 3 | Sept 13 | checks → BKT mastery → "you're wrong about yourself"; past-paper exam weighting |
+| 4 | Sept 14 | limits enforced, pricing, Polar checkout, onboarding, Google sign-in, demo button |
+| 5 | Sept 15 | deck, video, README, Devpost submitted by 6 PM IST |
+
+**Env-var trap:** the Windows user environment already has `GEMINI_API_KEY`
+(the shared paid key), and Next never lets `.env.local` override an existing
+process variable. The app therefore reads `SYLLABUS_GEMINI_KEY` only.
+
 ### Note on the API key
 The spike ran on the `GEMINI_API_KEY` already present in the user's User-scope
 environment variables — the shared FairLens/KSP/Crucible key, not a new one.
