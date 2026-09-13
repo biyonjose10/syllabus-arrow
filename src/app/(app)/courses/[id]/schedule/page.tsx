@@ -35,6 +35,7 @@ export default async function SchedulePage({ params }: PageProps<"/courses/[id]/
       examDate={toDateInput(course.examDate)}
       minutesPerDay={course.minutesPerDay}
       submitLabel={items.length ? "Re-plan" : "Build my schedule"}
+      stacked={items.length > 0}
     />
   );
 

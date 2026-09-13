@@ -157,6 +157,9 @@ export function ConceptGraph({
             nodesDraggable={false}
             fitView
             fitViewOptions={{ padding: 0.15 }}
+            // The first fit can run before the container has its final size (slow phones,
+            // late CSS), leaving the graph off-centre. Fit again once layout has settled.
+            onInit={(instance) => requestAnimationFrame(() => void instance.fitView({ padding: 0.15 }))}
             minZoom={0.2}
             proOptions={{ hideAttribution: true }}
           >

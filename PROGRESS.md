@@ -7,7 +7,33 @@ Deadline **Sept 15, 11:00 PM EDT**. Target submission **Sept 15, 6:00 PM IST**.
 
 ---
 
-## Start here — where we stopped (Sept 13)
+## Start here — where we stopped (Sept 14)
+
+**Every gate's code is built, deployed and CI-green** (`d0fd3dc` Gate 3, `5c8ff99` Gate 4, `0c01503` +
+`445a3e6` Gate 5).
+
+**Verified on the live site, end to end (Sept 14, headless Chrome as a verified test account):**
+sign in → onboarding (course, exam date) → upload MIT 18.06 syllabus PDF → five processing steps, done in
+33 s on `gemini-3.6-flash` → 24 topics, 27 edges, nothing dropped by validation → 3 assessments (no dates in
+the PDF) → 96 schedule items from the exam date, none late → practice questions written and blind-verified
+(first batch 30 of 30 agreed) → a question answered with feedback. The demo course (`/api/demo`) signs in,
+and its insight renders: "You marked Linear Systems and Gaussian Elimination done — but 5 of 6 answers on
+topics that need it were wrong … 15 of 18 examined topics depend on it."
+
+### Still needs a human
+
+1. **Google sign-in:** OAuth client id + secret (redirect `https://syllabus-arrow.vercel.app/api/auth/callback/google`), then Publish app.
+2. **Polar sandbox:** access token, "Pro" product id, webhook secret (endpoint `https://syllabus-arrow.vercel.app/api/auth/polar/webhooks`).
+   Until set, the pricing page says "Checkout opens soon".
+3. **Gate 0 phone test** with a real inbox (verification email from monkeswag69@gmail.com).
+4. **Devpost:** submit using `docs/devpost.md`, the video, and the deck printed from `/deck`.
+
+### Operational notes
+
+- Demo course: `npx tsx prisma/seed.mts` (needs `DEMO_USER_PASSWORD`), zero model calls.
+- After a deploy that adds an Inngest function: `curl -X PUT https://syllabus-arrow.vercel.app/api/inngest`.
+
+## Earlier — Sept 13
 
 **The live site is up** (home/sign-up/sign-in 200, dashboard 307 to sign-in, status API 401).
 Gates 1+2 code is written, committed (`efa8851`) and CI green. Nothing has been tested end to end yet.
