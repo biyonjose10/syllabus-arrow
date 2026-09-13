@@ -100,7 +100,12 @@ export default async function SchedulePage({ params }: PageProps<"/courses/[id]/
                           {item.kind === "LEARN" ? "Learn" : "Review"}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="font-medium">{item.concept.name}</span>
+                          <Link
+                            href={`/courses/${course.id}/check?concept=${item.concept.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {item.concept.name}
+                          </Link>
                           {item.kind === "LEARN" ? (
                             <span className="block text-xs text-ink-3">
                               {formatMinutes(item.minutes)}

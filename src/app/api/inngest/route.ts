@@ -1,5 +1,6 @@
 import { serve } from "inngest/next";
 
+import { generateChecks } from "@/lib/checks/functions";
 import { ingestDocument } from "@/lib/ingest/functions";
 import { inngest } from "@/lib/inngest";
 
@@ -9,4 +10,4 @@ import { inngest } from "@/lib/inngest";
  */
 export const maxDuration = 300;
 
-export const { GET, POST, PUT } = serve({ client: inngest, functions: [ingestDocument] });
+export const { GET, POST, PUT } = serve({ client: inngest, functions: [ingestDocument, generateChecks] });

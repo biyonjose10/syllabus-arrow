@@ -38,6 +38,8 @@ export type ScheduleInput = {
   /** The first day that can be scheduled — normally today. */
   start: Date;
   minutesPerDay: number;
+  /** Share of past-paper marks per concept. Breaks ties between equal deadlines. */
+  examWeight?: ReadonlyMap<string, number>;
 };
 
 export type PlannedItem = {
@@ -110,8 +112,11 @@ export function buildSchedule(input: ScheduleInput): ScheduleResult {
     }
   }
 
-  // ── order: prerequisites first, then earliest deadline, then syllabus order ─
-  const order = priorityTopo(ids, children, parentCount, (id) => deadline.get(id)!.getTime());
+  // ── order: prerequisites first, then earliest deadline, then exam weight,
+  // then syllabus order. Deadlines are whole days (86.4M ms apart), so subtracting
+  // a weight in [0, 1] only reorders topics that share a deadline.
+  const weight = (id: string) => Math.min(1, Math.max(0, input.examWeight?.get(id) ?? 0));
+  const order = priorityTopo(ids, children, parentCount, (id) => deadline.get(id)!.getTime() - weight(id));
 
   // ── time budget ───────────────────────────────────────────────────────────
   let finalDeadline = start;

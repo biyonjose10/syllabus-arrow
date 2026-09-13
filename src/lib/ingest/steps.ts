@@ -11,6 +11,18 @@ export const INGEST_STEPS = [
   "Building your schedule",
 ] as const;
 
+export const PAST_PAPER_STEPS = [
+  "Reading your PDF",
+  "Matching exam questions to topics",
+  "Checking the matches",
+  "Saving exam weights",
+  "Re-planning with exam weights",
+] as const;
+
+export function stepsFor(kind: "SYLLABUS" | "PAST_PAPER"): readonly string[] {
+  return kind === "PAST_PAPER" ? PAST_PAPER_STEPS : INGEST_STEPS;
+}
+
 /** Stable failure codes → what the student is told. */
 export const INGEST_ERRORS: Record<string, { title: string; hint: string }> = {
   WRONG_FORMAT: {
@@ -20,6 +32,18 @@ export const INGEST_ERRORS: Record<string, { title: string; hint: string }> = {
   NOT_A_SYLLABUS: {
     title: "This doesn't look like a syllabus",
     hint: "Upload the course outline or scheme of study — the document that lists the topics.",
+  },
+  NOT_A_PAST_PAPER: {
+    title: "This doesn't look like an exam paper",
+    hint: "Upload a past exam or test for this course — the paper with the questions on it.",
+  },
+  NO_MATCHES: {
+    title: "None of the paper's questions matched this course",
+    hint: "Check it's a paper for this course. Exam weights only come from questions that map onto the course map.",
+  },
+  NEEDS_SYLLABUS: {
+    title: "Upload the syllabus first",
+    hint: "Past papers are matched against the course map, so the map has to exist.",
   },
   TOO_THIN: {
     title: "Not enough topics to plan from",

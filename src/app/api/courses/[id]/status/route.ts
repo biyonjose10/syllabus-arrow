@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { INGEST_STEPS } from "@/lib/ingest/steps";
+import { stepsFor } from "@/lib/ingest/steps";
 import { ensurePersonalWorkspace, getCourseStatus } from "@/lib/tenancy";
 
 /**
@@ -16,7 +16,7 @@ export async function GET(request: Request, { params }: RouteContext<"/api/cours
   if (!status) return Response.json({ error: "Not found." }, { status: 404 });
 
   return Response.json(
-    { ...status, steps: INGEST_STEPS },
+    { ...status, steps: stepsFor(status.job?.document.kind ?? "SYLLABUS") },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

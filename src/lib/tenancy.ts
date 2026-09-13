@@ -1,4 +1,5 @@
 import { prismaUnsafe as db } from "./db";
+import { BKT, bktReplay, bktUpdate } from "./mastery/bkt";
 import { assertFeature, assertWithinLimit, type PlanId } from "./plans";
 
 /**
@@ -337,7 +338,7 @@ export async function getCourseStatus(ctx: WorkspaceContext, courseId: string) {
       report: true,
       createdAt: true,
       finishedAt: true,
-      document: { select: { filename: true } },
+      document: { select: { filename: true, kind: true } },
     },
   });
   return { status: course.status, job };
@@ -441,11 +442,14 @@ export async function getCourseGraph(ctx: WorkspaceContext, courseId: string) {
 export async function getScheduleInputs(ctx: WorkspaceContext, courseId: string) {
   const graph = await getCourseGraph(ctx, courseId);
   if (!graph) return null;
-  const course = await db.course.findFirstOrThrow({
-    where: { id: courseId, workspaceId: ctx.workspaceId },
-    select: { examDate: true, minutesPerDay: true },
-  });
-  return { ...graph, examDate: course.examDate, minutesPerDay: course.minutesPerDay };
+  const [course, examQuestions] = await Promise.all([
+    db.course.findFirstOrThrow({
+      where: { id: courseId, workspaceId: ctx.workspaceId },
+      select: { examDate: true, minutesPerDay: true },
+    }),
+    db.examQuestion.findMany({ where: { courseId, workspaceId: ctx.workspaceId }, select: { conceptId: true, marks: true } }),
+  ]);
+  return { ...graph, examDate: course.examDate, minutesPerDay: course.minutesPerDay, examQuestions };
 }
 
 export async function replaceSchedule(
@@ -456,8 +460,10 @@ export async function replaceSchedule(
     lateConcepts: number;
     items: { conceptId: string; date: Date; kind: "LEARN" | "REVIEW"; minutes: number; seq: number; deadline: Date; lateByDays: number }[];
   },
+  /** The demo's schedule is re-dated daily by the system, never by a visitor. */
+  options: { systemRefresh?: boolean } = {},
 ) {
-  assertWritable(ctx);
+  if (!options.systemRefresh) assertWritable(ctx);
   const where = { courseId, workspaceId: ctx.workspaceId };
   await db.$transaction([
     db.scheduleItem.deleteMany({ where }),
@@ -501,12 +507,344 @@ export async function getSchedule(ctx: WorkspaceContext, courseId: string) {
   return { course, items };
 }
 
+// ── Course-level background jobs ────────────────────────────────────────────
+
+/** Like contextForJob: the workspace comes from the course's own row. */
+export async function contextForCourse(courseId: string) {
+  const course = await db.course.findUnique({
+    where: { id: courseId },
+    select: {
+      id: true,
+      title: true,
+      workspace: {
+        select: {
+          id: true,
+          plan: true,
+          isDemo: true,
+          memberships: { where: { role: "OWNER" }, take: 1, select: { userId: true } },
+        },
+      },
+    },
+  });
+  if (!course) return null;
+  return {
+    ctx: toContext(course.workspace.memberships[0]?.userId ?? "", course.workspace),
+    course: { id: course.id, title: course.title },
+  };
+}
+
+export async function setChecksStatus(ctx: WorkspaceContext, courseId: string, status: "PENDING" | "READY" | "FAILED") {
+  await db.course.updateMany({ where: { id: courseId, workspaceId: ctx.workspaceId }, data: { checksStatus: status } });
+}
+
+export async function saveCheckQuestions(
+  ctx: WorkspaceContext,
+  courseId: string,
+  questions: { conceptId: string; stem: string; options: string[]; answerIndex: number; explanation: string; verified: boolean }[],
+): Promise<number> {
+  const concepts = await db.concept.findMany({ where: { courseId, workspaceId: ctx.workspaceId }, select: { id: true } });
+  const known = new Set(concepts.map((c) => c.id));
+  const rows = questions.filter((q) => known.has(q.conceptId));
+  if (rows.length) {
+    await db.checkQuestion.createMany({ data: rows.map((q) => ({ ...q, courseId, workspaceId: ctx.workspaceId })) });
+  }
+  return rows.filter((q) => q.verified).length;
+}
+
+// ── Practice and mastery ────────────────────────────────────────────────────
+
+const dayKey = (prefix: string, now = new Date()) => `${prefix}:${now.toISOString().slice(0, 10)}`;
+
+export async function getChecksUsedToday(ctx: WorkspaceContext): Promise<number> {
+  const counter = await db.usageCounter.findUnique({
+    where: { workspaceId_key: { workspaceId: ctx.workspaceId, key: dayKey("checks") } },
+    select: { count: true },
+  });
+  return counter?.count ?? 0;
+}
+
+/** Everything the question picker needs, for the signed-in student. `null` → 404. */
+export async function getPracticeState(ctx: WorkspaceContext, courseId: string) {
+  const course = await db.course.findFirst({
+    where: { id: courseId, workspaceId: ctx.workspaceId },
+    select: { id: true, title: true, status: true, checksStatus: true },
+  });
+  if (!course) return null;
+  const where = { courseId, workspaceId: ctx.workspaceId };
+  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+
+  const [questions, answered, mastery, due, concepts] = await Promise.all([
+    db.checkQuestion.findMany({ where: { ...where, verified: true, flaggedAt: null }, select: { id: true, conceptId: true } }),
+    db.attempt.groupBy({
+      by: ["questionId"],
+      where: { workspaceId: ctx.workspaceId, userId: ctx.userId, question: { courseId } },
+      _count: { _all: true },
+    }),
+    db.masteryState.findMany({
+      where: { workspaceId: ctx.workspaceId, userId: ctx.userId, concept: { courseId } },
+      select: { conceptId: true, pKnown: true, attempts: true },
+    }),
+    db.scheduleItem.findMany({ where: { ...where, date: { lte: today } }, select: { conceptId: true }, distinct: ["conceptId"] }),
+    db.concept.findMany({ where, orderBy: { position: "asc" }, select: { id: true, name: true } }),
+  ]);
+
+  return {
+    course,
+    questions,
+    timesAnswered: new Map(answered.map((a) => [a.questionId, a._count._all])),
+    mastery: new Map(mastery.map((m) => [m.conceptId, { pKnown: m.pKnown, attempts: m.attempts }])),
+    due: new Set(due.map((d) => d.conceptId)),
+    concepts,
+  };
+}
+
+/** A question without its answer — what the browser is allowed to see. */
+export async function getQuestionForPractice(ctx: WorkspaceContext, questionId: string) {
+  return db.checkQuestion.findFirst({
+    where: { id: questionId, workspaceId: ctx.workspaceId, verified: true, flaggedAt: null },
+    select: { id: true, conceptId: true, stem: true, options: true, concept: { select: { name: true } } },
+  });
+}
+
+/**
+ * Marks an answer and updates mastery with BKT. The answer key never leaves
+ * the server before this call. In the demo workspace the answer is marked
+ * but nothing is written, so every judge sees the same seeded story.
+ */
+export async function recordAttempt(ctx: WorkspaceContext, questionId: string, chosenIndex: number) {
+  const question = await db.checkQuestion.findFirst({
+    where: { id: questionId, workspaceId: ctx.workspaceId, verified: true, flaggedAt: null },
+    select: { id: true, conceptId: true, answerIndex: true, explanation: true, options: true, concept: { select: { name: true, courseId: true } } },
+  });
+  if (!question) throw new NotFoundError("That question");
+  if (!Number.isInteger(chosenIndex) || chosenIndex < 0 || chosenIndex >= question.options.length) {
+    throw new NotFoundError("That answer");
+  }
+
+  const correct = chosenIndex === question.answerIndex;
+  const existing = await db.masteryState.findUnique({
+    where: { userId_conceptId: { userId: ctx.userId, conceptId: question.conceptId } },
+    select: { pKnown: true, attempts: true },
+  });
+  const before = existing?.pKnown ?? BKT.pInit;
+  const after = bktUpdate(before, correct);
+  const result = {
+    correct,
+    answerIndex: question.answerIndex,
+    explanation: question.explanation,
+    conceptId: question.conceptId,
+    conceptName: question.concept.name,
+    courseId: question.concept.courseId,
+    before,
+    after,
+    attempts: (existing?.attempts ?? 0) + 1,
+    saved: !ctx.isDemo,
+  };
+  if (ctx.isDemo) return result;
+
+  assertWithinLimit(ctx.plan, "checksPerDay", await getChecksUsedToday(ctx));
+  const key = dayKey("checks");
+  await db.$transaction([
+    db.usageCounter.upsert({
+      where: { workspaceId_key: { workspaceId: ctx.workspaceId, key } },
+      create: { workspaceId: ctx.workspaceId, key, count: 1 },
+      update: { count: { increment: 1 } },
+    }),
+    db.attempt.create({ data: { workspaceId: ctx.workspaceId, userId: ctx.userId, questionId, chosenIndex, correct } }),
+    db.masteryState.upsert({
+      where: { userId_conceptId: { userId: ctx.userId, conceptId: question.conceptId } },
+      create: {
+        workspaceId: ctx.workspaceId,
+        userId: ctx.userId,
+        conceptId: question.conceptId,
+        pKnown: after,
+        attempts: 1,
+        correct: correct ? 1 : 0,
+      },
+      update: { pKnown: after, attempts: { increment: 1 }, correct: { increment: correct ? 1 : 0 } },
+    }),
+  ]);
+  return result;
+}
+
+/**
+ * "This question is wrong." The question stops being shown, and the student's
+ * mastery for that concept is replayed from the answers that remain — so a bad
+ * key cannot keep counting against them.
+ */
+export async function flagQuestion(ctx: WorkspaceContext, questionId: string) {
+  assertWritable(ctx);
+  const question = await db.checkQuestion.findFirst({
+    where: { id: questionId, workspaceId: ctx.workspaceId },
+    select: { id: true, conceptId: true, courseId: true },
+  });
+  if (!question) throw new NotFoundError("That question");
+
+  await db.checkQuestion.update({ where: { id: question.id }, data: { flaggedAt: new Date() } });
+
+  const answers = await db.attempt.findMany({
+    where: {
+      workspaceId: ctx.workspaceId,
+      userId: ctx.userId,
+      question: { conceptId: question.conceptId, verified: true, flaggedAt: null },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { correct: true },
+  });
+  const key = { userId_conceptId: { userId: ctx.userId, conceptId: question.conceptId } };
+  if (answers.length === 0) {
+    await db.masteryState.deleteMany({ where: { userId: ctx.userId, conceptId: question.conceptId } });
+  } else {
+    const replay = {
+      pKnown: bktReplay(answers.map((a) => a.correct)),
+      attempts: answers.length,
+      correct: answers.filter((a) => a.correct).length,
+    };
+    await db.masteryState.upsert({
+      where: key,
+      create: { workspaceId: ctx.workspaceId, userId: ctx.userId, conceptId: question.conceptId, ...replay },
+      update: replay,
+    });
+  }
+  return question.courseId;
+}
+
+/** "I've done this." The claim the insights page is allowed to contradict. */
+export async function setMarkedDone(ctx: WorkspaceContext, conceptId: string, done: boolean) {
+  assertWritable(ctx);
+  const concept = await db.concept.findFirst({
+    where: { id: conceptId, workspaceId: ctx.workspaceId },
+    select: { id: true, courseId: true },
+  });
+  if (!concept) throw new NotFoundError("That topic");
+  if (done) {
+    await db.selfReport.upsert({
+      where: { userId_conceptId: { userId: ctx.userId, conceptId } },
+      create: { workspaceId: ctx.workspaceId, userId: ctx.userId, conceptId },
+      update: {},
+    });
+  } else {
+    await db.selfReport.deleteMany({ where: { userId: ctx.userId, conceptId, workspaceId: ctx.workspaceId } });
+  }
+  return concept.courseId;
+}
+
+/** Map + the student's evidence about it. Feeds the map colours and the insights. */
+export async function getMasteryOverview(ctx: WorkspaceContext, courseId: string) {
+  const graph = await getCourseGraph(ctx, courseId);
+  if (!graph) return null;
+  const scope = { workspaceId: ctx.workspaceId, userId: ctx.userId };
+
+  const [mastery, reports, attempts, questionCounts, examQuestions] = await Promise.all([
+    db.masteryState.findMany({
+      where: { ...scope, concept: { courseId } },
+      select: { conceptId: true, pKnown: true, attempts: true, correct: true },
+    }),
+    db.selfReport.findMany({ where: { ...scope, concept: { courseId } }, select: { conceptId: true } }),
+    db.attempt.findMany({
+      where: { ...scope, question: { courseId, verified: true, flaggedAt: null } },
+      select: { correct: true, question: { select: { conceptId: true } } },
+    }),
+    db.checkQuestion.groupBy({
+      by: ["conceptId"],
+      where: { courseId, workspaceId: ctx.workspaceId, verified: true, flaggedAt: null },
+      _count: { _all: true },
+    }),
+    db.examQuestion.findMany({
+      where: { courseId, workspaceId: ctx.workspaceId },
+      select: { conceptId: true, marks: true },
+    }),
+  ]);
+
+  return {
+    ...graph,
+    mastery: new Map(mastery.map((m) => [m.conceptId, m])),
+    markedDone: new Set(reports.map((r) => r.conceptId)),
+    attempts: attempts.map((a) => ({ conceptId: a.question.conceptId, correct: a.correct })),
+    questionCounts: new Map(questionCounts.map((q) => [q.conceptId, q._count._all])),
+    examQuestions,
+  };
+}
+
+// ── Past papers ─────────────────────────────────────────────────────────────
+
+export async function persistExamQuestions(
+  ctx: WorkspaceContext,
+  courseId: string,
+  documentId: string,
+  rows: { conceptId: string; label: string; text: string; marks: number | null }[],
+) {
+  assertWritable(ctx);
+  const concepts = await db.concept.findMany({ where: { courseId, workspaceId: ctx.workspaceId }, select: { id: true } });
+  const known = new Set(concepts.map((c) => c.id));
+  await db.$transaction([
+    db.examQuestion.deleteMany({ where: { documentId, workspaceId: ctx.workspaceId } }),
+    db.examQuestion.createMany({
+      data: rows
+        .filter((r) => known.has(r.conceptId))
+        .map((r) => ({ ...r, courseId, documentId, workspaceId: ctx.workspaceId })),
+    }),
+  ]);
+}
+
+// ── Billing ─────────────────────────────────────────────────────────────────
+
+/**
+ * Called by the Polar webhook — no session, so the workspace is found from the
+ * Better Auth user id Polar holds as the customer's external id. Only a live
+ * subscription grants Pro; a revoked or ended one drops back to Free.
+ */
+export async function applySubscription(
+  userId: string,
+  subscription: { id: string; status: string; currentPeriodEnd: Date | null; endedAt: Date | null },
+) {
+  const ctx = await ensurePersonalWorkspace(userId, "");
+  if (ctx.isDemo) return;
+  const pro = ["active", "trialing", "past_due"].includes(subscription.status) && !subscription.endedAt;
+  const data = {
+    polarSubscriptionId: subscription.id,
+    status: subscription.status,
+    currentPeriodEnd: subscription.currentPeriodEnd,
+  };
+  await db.$transaction([
+    db.subscription.upsert({
+      where: { workspaceId: ctx.workspaceId },
+      create: { workspaceId: ctx.workspaceId, ...data },
+      update: data,
+    }),
+    db.workspace.update({ where: { id: ctx.workspaceId }, data: { plan: pro ? "PRO" : "FREE" } }),
+  ]);
+}
+
+export async function getBilling(ctx: WorkspaceContext) {
+  const [subscription, usage] = await Promise.all([
+    db.subscription.findUnique({
+      where: { workspaceId: ctx.workspaceId },
+      select: { status: true, currentPeriodEnd: true, updatedAt: true },
+    }),
+    getUsage(ctx),
+  ]);
+  return { plan: ctx.plan, isDemo: ctx.isDemo, subscription, usage };
+}
+
+// ── Demo ────────────────────────────────────────────────────────────────────
+
+/** The one course in the demo workspace, if it has been seeded. */
+export async function findDemoCourse() {
+  return db.course.findFirst({
+    where: { workspace: { isDemo: true } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, plannedAt: true },
+  });
+}
+
 // ── Usage ───────────────────────────────────────────────────────────────────
 
 export async function getUsage(ctx: WorkspaceContext) {
-  const [courses, documents] = await Promise.all([
+  const [courses, documents, checksToday] = await Promise.all([
     db.course.count({ where: { workspaceId: ctx.workspaceId } }),
     db.document.count({ where: { workspaceId: ctx.workspaceId } }),
+    getChecksUsedToday(ctx),
   ]);
-  return { courses, documents };
+  return { courses, documents, checksToday };
 }

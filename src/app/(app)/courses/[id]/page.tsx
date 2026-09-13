@@ -7,7 +7,8 @@ import { ProcessingState } from "@/components/ProcessingState";
 import { Alert, buttonClass, Card } from "@/components/ui";
 import { UploadPanel } from "@/components/UploadPanel";
 import { formatBytes, formatDay, toDateInput } from "@/lib/format";
-import { INGEST_ERRORS, INGEST_STEPS } from "@/lib/ingest/steps";
+import { INGEST_ERRORS, stepsFor } from "@/lib/ingest/steps";
+import { PLANS } from "@/lib/plans";
 import { requireWorkspace } from "@/lib/session";
 import { getCourseOverview, getCourseStatus, uploadPrefix } from "@/lib/tenancy";
 
@@ -29,7 +30,7 @@ export default async function CoursePage({ params }: PageProps<"/courses/[id]">)
       <Card className="p-6 sm:p-8">
         <ProcessingState
           courseId={course.id}
-          steps={INGEST_STEPS}
+          steps={stepsFor(job.document.kind)}
           initialStepIndex={job.stepIndex}
           filename={job.document.filename}
         />
@@ -172,6 +173,40 @@ export default async function CoursePage({ params }: PageProps<"/courses/[id]">)
             <UploadPanel courseId={course.id} prefix={prefix} title="Upload a new syllabus" />
           </div>
         </details>
+      </Card>
+
+      <Card className="flex flex-col gap-4 p-5">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold">Past papers</h2>
+            <span className="rounded-full border border-line px-2 py-0.5 text-xs font-medium text-ink-2">Pro</span>
+          </div>
+          <p className="max-w-prose text-sm text-ink-2">
+            Every question on a past exam is matched to a topic on the map. Topics that carry more marks move earlier among
+            equal deadlines, and the insights say how many marks a shaky foundation puts at risk.
+          </p>
+        </div>
+        {course.documents.some((d) => d.kind === "PAST_PAPER") ? (
+          <p className="text-sm text-ink-3">
+            {course.documents.filter((d) => d.kind === "PAST_PAPER").length} past paper(s) mapped.
+          </p>
+        ) : null}
+        {PLANS[ctx.plan].features.pastPapers ? (
+          <UploadPanel
+            courseId={course.id}
+            prefix={prefix}
+            kind="PAST_PAPER"
+            title="Upload a past paper"
+            hint="A previous exam for this course, as a PDF. Up to 25 MB."
+          />
+        ) : ctx.isDemo ? null : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Link href="/pricing" className={buttonClass("primary")}>
+              Unlock with Pro
+            </Link>
+            <span className="text-sm text-ink-3">${PLANS.pro.priceMonthlyUsd}/month · cancel any time</span>
+          </div>
+        )}
       </Card>
     </div>
   );

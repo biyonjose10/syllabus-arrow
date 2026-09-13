@@ -3,7 +3,13 @@
 import dagre from "@dagrejs/dagre";
 import { Background, Controls, MarkerType, ReactFlow, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import Link from "next/link";
 import { useMemo, useState } from "react";
+
+import { MarkDoneButton } from "@/components/MarkDoneButton";
+import { BAND_FILL, BAND_STROKE, BandChip, BandLegend } from "@/components/mastery";
+import { buttonClass } from "@/components/ui";
+import type { MasteryBand } from "@/lib/mastery/bkt";
 
 export type GraphConcept = {
   id: string;
@@ -12,6 +18,13 @@ export type GraphConcept = {
   sourceRef: string;
   /** How many topics depend on this one, directly or transitively. */
   downstreamCount: number;
+  band: MasteryBand;
+  pKnown: number | null;
+  attempts: number;
+  markedDone: boolean;
+  questions: number;
+  /** Share of past-paper marks, when past papers exist. */
+  examWeight: number | null;
 };
 
 export type GraphEdge = { id: string; from: string; to: string; rationale: string };
@@ -47,10 +60,23 @@ function reach(start: string, adjacency: Map<string, string[]>): Set<string> {
   return seen;
 }
 
-export function ConceptGraph({ concepts, edges }: { concepts: GraphConcept[]; edges: GraphEdge[] }) {
+export function ConceptGraph({
+  courseId,
+  concepts,
+  edges,
+  demo,
+}: {
+  courseId: string;
+  concepts: GraphConcept[];
+  edges: GraphEdge[];
+  demo: boolean;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
 
-  const positions = useMemo(() => layout(concepts, edges), [concepts, edges]);
+  // Layout depends only on structure, so marking a topic done never moves the map.
+  const structure = useMemo(() => concepts.map((c) => c.id).join("|"), [concepts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const positions = useMemo(() => layout(concepts, edges), [structure, edges]);
   const byId = useMemo(() => new Map(concepts.map((c) => [c.id, c])), [concepts]);
   const { down, up } = useMemo(() => {
     const down = new Map<string, string[]>();
@@ -72,10 +98,10 @@ export function ConceptGraph({ concepts, edges }: { concepts: GraphConcept[]; ed
     return {
       id: c.id,
       position: positions.get(c.id)!,
-      data: { label: c.name },
+      data: { label: `${c.markedDone ? "✓ " : ""}${c.name}` },
       connectable: false,
       draggable: false,
-      ariaLabel: `${c.name}. ${c.downstreamCount} topics depend on it.`,
+      ariaLabel: `${c.name}. ${c.downstreamCount} topics depend on it.${c.markedDone ? " Marked done." : ""}`,
       style: {
         width: NODE_WIDTH,
         minHeight: NODE_HEIGHT,
@@ -88,8 +114,9 @@ export function ConceptGraph({ concepts, edges }: { concepts: GraphConcept[]; ed
         justifyContent: "center",
         textAlign: "center",
         color: "var(--color-ink)",
-        background: isSelected ? "var(--color-accent-soft)" : descendants.has(c.id) ? "#fff8f3" : "white",
-        border: `1.5px solid ${isSelected ? "var(--color-accent)" : ancestors.has(c.id) ? "var(--color-ink)" : descendants.has(c.id) ? "#f0a47a" : "var(--color-line)"}`,
+        background: BAND_FILL[c.band],
+        border: `${isSelected ? 2.5 : 1.5}px solid ${isSelected ? "var(--color-accent)" : BAND_STROKE[c.band]}`,
+        boxShadow: isSelected ? "0 0 0 4px var(--color-accent-soft)" : undefined,
         opacity: dimmed ? 0.35 : 1,
         fontWeight: isSelected ? 600 : 500,
       },
@@ -99,7 +126,7 @@ export function ConceptGraph({ concepts, edges }: { concepts: GraphConcept[]; ed
   const flowEdges: Edge[] = edges.map((e) => {
     const onPath =
       selected !== null &&
-      ((e.to === selected || ancestors.has(e.to)) && (ancestors.has(e.from) || e.from === selected) ||
+      (((e.to === selected || ancestors.has(e.to)) && (ancestors.has(e.from) || e.from === selected)) ||
         ((e.from === selected || descendants.has(e.from)) && descendants.has(e.to)));
     const color = onPath ? "var(--color-accent)" : "var(--color-ink-3)";
     return {
@@ -117,63 +144,84 @@ export function ConceptGraph({ concepts, edges }: { concepts: GraphConcept[]; ed
   const unlocks = active ? edges.filter((e) => e.from === active.id) : [];
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-      <div className="h-[65vh] min-h-96 overflow-hidden rounded-xl border border-line bg-white">
-        <ReactFlow
-          nodes={nodes}
-          edges={flowEdges}
-          onNodeClick={(_, node) => setSelected((current) => (current === node.id ? null : node.id))}
-          onPaneClick={() => setSelected(null)}
-          nodesConnectable={false}
-          nodesDraggable={false}
-          fitView
-          fitViewOptions={{ padding: 0.15 }}
-          minZoom={0.2}
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background gap={24} color="var(--color-line)" />
-          <Controls showInteractive={false} />
-        </ReactFlow>
-      </div>
+    <div className="flex flex-col gap-3">
+      <BandLegend />
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="h-[65vh] min-h-96 overflow-hidden rounded-xl border border-line bg-white">
+          <ReactFlow
+            nodes={nodes}
+            edges={flowEdges}
+            onNodeClick={(_, node) => setSelected((current) => (current === node.id ? null : node.id))}
+            onPaneClick={() => setSelected(null)}
+            nodesConnectable={false}
+            nodesDraggable={false}
+            fitView
+            fitViewOptions={{ padding: 0.15 }}
+            minZoom={0.2}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background gap={24} color="var(--color-line)" />
+            <Controls showInteractive={false} />
+          </ReactFlow>
+        </div>
 
-      <aside className="flex flex-col gap-4 rounded-xl border border-line bg-white p-5" aria-live="polite">
-        {active ? (
-          <>
-            <div className="flex flex-col gap-1">
-              <p className="text-xs text-ink-3">{active.sourceRef}</p>
-              <h2 className="text-lg font-semibold">{active.name}</h2>
-              <p className="text-sm leading-relaxed text-ink-2">{active.summary}</p>
+        <aside className="flex flex-col gap-4 rounded-xl border border-line bg-white p-5" aria-live="polite">
+          {active ? (
+            <>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs text-ink-3">{active.sourceRef}</p>
+                <h2 className="text-lg font-semibold">{active.name}</h2>
+                <p className="text-sm leading-relaxed text-ink-2">{active.summary}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <BandChip band={active.band} />
+                {active.attempts ? (
+                  <span className="text-ink-3">
+                    {Math.round((active.pKnown ?? 0) * 100)}% after {active.attempts} answer{active.attempts === 1 ? "" : "s"}
+                  </span>
+                ) : null}
+              </div>
+              <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-ink">
+                {active.downstreamCount === 0
+                  ? "Nothing else in this course depends on it."
+                  : `${active.downstreamCount} topic${active.downstreamCount === 1 ? "" : "s"} depend${active.downstreamCount === 1 ? "s" : ""} on this, directly or further down.`}
+                {active.examWeight ? ` Worth ${Math.round(active.examWeight * 100)}% of past-paper marks.` : ""}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <MarkDoneButton key={`${active.id}-${active.markedDone}`} conceptId={active.id} done={active.markedDone} demo={demo} />
+                {active.questions > 0 ? (
+                  <Link href={`/courses/${courseId}/check?concept=${active.id}`} className={buttonClass("secondary")}>
+                    Practise ({active.questions})
+                  </Link>
+                ) : null}
+              </div>
+              <RelationList
+                title="Needs first"
+                empty="A starting point — no prerequisites in this course."
+                items={prerequisites.map((e) => ({ id: e.from, name: byId.get(e.from)?.name ?? "", rationale: e.rationale }))}
+                onSelect={setSelected}
+              />
+              <RelationList
+                title="Unlocks"
+                empty="Nothing directly."
+                items={unlocks.map((e) => ({ id: e.to, name: byId.get(e.to)?.name ?? "", rationale: e.rationale }))}
+                onSelect={setSelected}
+              />
+            </>
+          ) : (
+            <div className="flex flex-col gap-2 text-sm text-ink-2">
+              <h2 className="text-base font-semibold text-ink">How to read this</h2>
+              <p>Foundations are at the top. An arrow means the lower topic can&apos;t be understood without the upper one.</p>
+              <p>Tap a topic to see what it needs, what it unlocks, and why — then mark it done or practise it.</p>
+              <p>Colours come from your practice answers, not from what you marked done.</p>
+              <p className="text-ink-3">
+                The syllabus lists when things are taught. These links are inferred from the subject itself, and every one
+                carries its reason.
+              </p>
             </div>
-            <p className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-ink">
-              {active.downstreamCount === 0
-                ? "Nothing else in this course depends on it."
-                : `${active.downstreamCount} topic${active.downstreamCount === 1 ? "" : "s"} depend${active.downstreamCount === 1 ? "s" : ""} on this, directly or further down.`}
-            </p>
-            <RelationList
-              title="Needs first"
-              empty="A starting point — no prerequisites in this course."
-              items={prerequisites.map((e) => ({ id: e.from, name: byId.get(e.from)?.name ?? "", rationale: e.rationale }))}
-              onSelect={setSelected}
-            />
-            <RelationList
-              title="Unlocks"
-              empty="Nothing directly."
-              items={unlocks.map((e) => ({ id: e.to, name: byId.get(e.to)?.name ?? "", rationale: e.rationale }))}
-              onSelect={setSelected}
-            />
-          </>
-        ) : (
-          <div className="flex flex-col gap-2 text-sm text-ink-2">
-            <h2 className="text-base font-semibold text-ink">How to read this</h2>
-            <p>Foundations are at the top. An arrow means the lower topic can&apos;t be understood without the upper one.</p>
-            <p>Tap a topic to see what it needs, what it unlocks, and why.</p>
-            <p className="text-ink-3">
-              The syllabus lists when things are taught. These links are inferred from the subject itself, and every one
-              carries its reason.
-            </p>
-          </div>
-        )}
-      </aside>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

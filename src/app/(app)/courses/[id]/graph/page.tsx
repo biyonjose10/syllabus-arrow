@@ -5,18 +5,20 @@ import { notFound } from "next/navigation";
 import { ConceptGraph } from "@/components/ConceptGraph";
 import { buttonClass, Card } from "@/components/ui";
 import { downstream, topoSort } from "@/lib/graph/algorithms";
+import { masteryBand } from "@/lib/mastery/bkt";
+import { examWeights } from "@/lib/schedule/exam-weight";
 import { requireWorkspace } from "@/lib/session";
-import { getCourseGraph } from "@/lib/tenancy";
+import { getMasteryOverview } from "@/lib/tenancy";
 
 export const metadata: Metadata = { title: "Concept map — Syllabus→" };
 
 export default async function GraphPage({ params }: PageProps<"/courses/[id]/graph">) {
   const { id } = await params;
   const { ctx } = await requireWorkspace(`/courses/${id}/graph`);
-  const graph = await getCourseGraph(ctx, id);
-  if (!graph) notFound();
+  const data = await getMasteryOverview(ctx, id);
+  if (!data) notFound();
 
-  if (graph.concepts.length === 0) {
+  if (data.concepts.length === 0) {
     return (
       <Card className="flex flex-col items-start gap-3 p-6">
         <h2 className="text-lg font-semibold">No map yet</h2>
@@ -28,14 +30,24 @@ export default async function GraphPage({ params }: PageProps<"/courses/[id]/gra
     );
   }
 
-  const edges = graph.edges.map((e) => ({ id: e.id, from: e.fromId, to: e.toId, rationale: e.rationale }));
-  const concepts = graph.concepts.map((c) => ({
-    id: c.id,
-    name: c.name,
-    summary: c.summary,
-    sourceRef: c.sourceRef,
-    downstreamCount: downstream(c.id, edges).size,
-  }));
+  const edges = data.edges.map((e) => ({ id: e.id, from: e.fromId, to: e.toId, rationale: e.rationale }));
+  const weights = examWeights(data.examQuestions);
+  const concepts = data.concepts.map((c) => {
+    const m = data.mastery.get(c.id);
+    return {
+      id: c.id,
+      name: c.name,
+      summary: c.summary,
+      sourceRef: c.sourceRef,
+      downstreamCount: downstream(c.id, edges).size,
+      band: masteryBand(m?.pKnown, m?.attempts ?? 0),
+      pKnown: m?.pKnown ?? null,
+      attempts: m?.attempts ?? 0,
+      markedDone: data.markedDone.has(c.id),
+      questions: data.questionCounts.get(c.id) ?? 0,
+      examWeight: weights.get(c.id) ?? null,
+    };
+  });
 
   // The same order the scheduler starts from — readable without the canvas.
   const order = topoSort(concepts.map((c) => c.id), edges) ?? concepts.map((c) => c.id);
@@ -55,7 +67,7 @@ export default async function GraphPage({ params }: PageProps<"/courses/[id]/gra
         — have the most topics resting on them.
       </p>
 
-      <ConceptGraph concepts={concepts} edges={edges} />
+      <ConceptGraph courseId={id} concepts={concepts} edges={edges} demo={ctx.isDemo} />
 
       <Card className="p-5">
         <details>
@@ -66,7 +78,10 @@ export default async function GraphPage({ params }: PageProps<"/courses/[id]/gra
               const needs = edges.filter((e) => e.to === conceptId).map((e) => byId.get(e.from)!.name);
               return (
                 <li key={conceptId}>
-                  <span className="font-medium">{c.name}</span>
+                  <span className="font-medium">
+                    {c.markedDone ? "✓ " : ""}
+                    {c.name}
+                  </span>
                   <span className="text-ink-3"> — {needs.length ? `needs ${needs.join(", ")}` : "starting point"}</span>
                 </li>
               );

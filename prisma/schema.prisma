@@ -163,6 +163,8 @@ model Course {
   planStatus    PlanStatus?
   plannedAt     DateTime?
   lateConcepts  Int            @default(0)
+  /// Practice questions: null (none requested), PENDING, READY or FAILED.
+  checksStatus  String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   documents     Document[]
@@ -329,7 +331,10 @@ model ExamQuestion {
   document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
   conceptId   String
   concept     Concept   @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  /// The paper's own numbering, e.g. "Q3(b)".
+  label       String    @default("")
   text        String
+  /// Marks attributed to THIS concept (a question's marks split across its concepts).
   marks       Float?
 
   @@index([workspaceId, courseId])

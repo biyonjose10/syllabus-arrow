@@ -10,6 +10,8 @@ export function CourseTabs({ courseId, ready }: { courseId: string; ready: boole
     { href: base, label: "Overview" },
     { href: `${base}/graph`, label: "Map", needsReady: true },
     { href: `${base}/schedule`, label: "Schedule", needsReady: true },
+    { href: `${base}/check`, label: "Practice", needsReady: true },
+    { href: `${base}/insights`, label: "Insights", needsReady: true },
   ];
 
   return (
