@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { NewCourseForm } from "@/components/NewCourseForm";
+import { OnboardingWizard } from "@/components/OnboardingWizard";
 import { Card } from "@/components/ui";
 import { UsageMeter } from "@/components/UsageMeter";
 import { PLANS } from "@/lib/plans";
@@ -43,11 +44,11 @@ export default async function DashboardPage() {
               <div className="flex flex-col gap-2">
                 <h2 className="text-lg font-semibold">No courses yet</h2>
                 <p className="max-w-prose text-sm leading-relaxed text-ink-2">
-                  Name a course, then upload its syllabus PDF. You&apos;ll get the map of which topics depend on which,
-                  and a schedule that works back from your exam date.
+                  Name a course, tell us when the exam is, then upload its syllabus PDF. You&apos;ll get the map of which
+                  topics depend on which, and a schedule that works back from your exam date.
                 </p>
               </div>
-              <NewCourseForm autoFocus />
+              <OnboardingWizard />
             </Card>
           ) : (
             <>

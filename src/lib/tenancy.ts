@@ -1,5 +1,7 @@
 import { prismaUnsafe as db } from "./db";
+import { DEMO_ASSESSMENTS, DEMO_EXAM_IN_DAYS } from "./demo";
 import { BKT, bktReplay, bktUpdate } from "./mastery/bkt";
+import { addDays, utcDay } from "./schedule/dates";
 import { assertFeature, assertWithinLimit, type PlanId } from "./plans";
 
 /**
@@ -836,6 +838,29 @@ export async function findDemoCourse() {
     orderBy: { createdAt: "asc" },
     select: { id: true, plannedAt: true },
   });
+}
+
+/**
+ * Moves the demo's illustrative dates forward to stay relative to today.
+ * System-only: it acts on nothing but the demo workspace, whoever calls it.
+ * Returns true when dates moved and the schedule needs rebuilding.
+ */
+export async function refreshDemoDates(courseId: string, now: Date = new Date()): Promise<boolean> {
+  const course = await db.course.findFirst({
+    where: { id: courseId, workspace: { isDemo: true } },
+    select: { id: true, plannedAt: true },
+  });
+  if (!course) return false;
+  const today = utcDay(now);
+  if (course.plannedAt && utcDay(course.plannedAt).getTime() === today.getTime()) return false;
+
+  await db.$transaction([
+    db.course.update({ where: { id: course.id }, data: { examDate: addDays(today, DEMO_EXAM_IN_DAYS) } }),
+    ...DEMO_ASSESSMENTS.map((a) =>
+      db.assessment.updateMany({ where: { courseId: course.id, title: a.title }, data: { dueDate: addDays(today, a.inDays) } }),
+    ),
+  ]);
+  return true;
 }
 
 // ── Usage ───────────────────────────────────────────────────────────────────

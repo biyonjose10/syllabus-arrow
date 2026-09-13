@@ -146,7 +146,16 @@ export function UploadPanel({
           onChange={(e) => onPick(e.target.files)}
         />
       </label>
-      {phase.name === "error" ? <Alert tone={phase.limitHit ? "info" : "error"}>{phase.message}</Alert> : null}
+      {phase.name === "error" ? (
+        <Alert tone={phase.limitHit ? "info" : "error"}>
+          {phase.message}{" "}
+          {phase.limitHit ? (
+            <a href="/pricing" className="font-medium underline underline-offset-4">
+              See Pro
+            </a>
+          ) : null}
+        </Alert>
+      ) : null}
     </div>
   );
 }

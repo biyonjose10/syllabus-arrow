@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import { createCourseAction, type CreateCourseState } from "@/app/(app)/dashboard/actions";
@@ -27,7 +28,16 @@ export function NewCourseForm({ autoFocus = false }: { autoFocus?: boolean }) {
           {pending ? "Adding…" : "Add course"}
         </Button>
       </div>
-      {state.error ? <Alert tone={state.limitHit ? "info" : "error"}>{state.error}</Alert> : null}
+      {state.error ? (
+        <Alert tone={state.limitHit ? "info" : "error"}>
+          {state.error}{" "}
+          {state.limitHit ? (
+            <Link href="/pricing" className="font-medium underline underline-offset-4">
+              See Pro
+            </Link>
+          ) : null}
+        </Alert>
+      ) : null}
     </form>
   );
 }

@@ -14,8 +14,9 @@ import { getCourseOverview, getCourseStatus, uploadPrefix } from "@/lib/tenancy"
 
 export const metadata: Metadata = { title: "Course — Syllabus→" };
 
-export default async function CoursePage({ params }: PageProps<"/courses/[id]">) {
+export default async function CoursePage({ params, searchParams }: PageProps<"/courses/[id]">) {
   const { id } = await params;
+  const welcome = (await searchParams).welcome === "1";
   const { ctx } = await requireWorkspace(`/courses/${id}`);
   const [course, status] = await Promise.all([getCourseOverview(ctx, id), getCourseStatus(ctx, id)]);
   if (!course || !status) notFound();
@@ -49,6 +50,7 @@ export default async function CoursePage({ params }: PageProps<"/courses/[id]">)
         ) : null}
         <Card className="flex flex-col gap-5 p-6 sm:p-8">
           <div className="flex flex-col gap-2">
+            {welcome && !failure ? <p className="text-xs font-medium text-accent">Step 3 of 3</p> : null}
             <h2 className="text-lg font-semibold">{failure ? "Try another PDF" : "Add the syllabus"}</h2>
             <p className="max-w-prose text-sm leading-relaxed text-ink-2">
               Syllabus→ reads the topics, works out which ones depend on which — a syllabus lists weeks, not
