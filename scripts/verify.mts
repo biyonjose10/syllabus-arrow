@@ -69,6 +69,7 @@ const results: Result[] = [];
 const DB_HOLDERS = new Set([
   "src/lib/tenancy", // the boundary itself
   "src/lib/auth", // Better Auth's Prisma adapter needs the raw client
+  "src/lib/llm/cache", // LlmCache + GlobalCounter: the only tables with no workspace, by design
 ]);
 
 results.push({

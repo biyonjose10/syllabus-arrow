@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { NewCourseForm } from "@/components/NewCourseForm";
 import { Card } from "@/components/ui";
@@ -53,15 +54,20 @@ export default async function DashboardPage() {
               <ul className="flex flex-col gap-3">
                 {courses.map((course) => (
                   <li key={course.id}>
-                    <Card className="flex flex-col gap-1 p-5">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <h2 className="truncate font-semibold">{course.title}</h2>
-                        <span className="shrink-0 text-xs text-ink-3">{STATUS_LABEL[course.status]}</span>
-                      </div>
-                      <p className="text-sm text-ink-3">
-                        {course._count.documents} documents · {course._count.concepts} concepts
-                      </p>
-                    </Card>
+                    <Link
+                      href={`/courses/${course.id}`}
+                      className="block rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                    >
+                      <Card className="flex flex-col gap-1 p-5 transition-colors hover:border-ink-3">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <h2 className="truncate font-semibold">{course.title}</h2>
+                          <span className="shrink-0 text-xs text-ink-3">{STATUS_LABEL[course.status]}</span>
+                        </div>
+                        <p className="text-sm text-ink-3">
+                          {course._count.documents} documents · {course._count.concepts} concepts
+                        </p>
+                      </Card>
+                    </Link>
                   </li>
                 ))}
               </ul>

@@ -157,6 +157,12 @@ model Course {
   /// Set by the student when the syllabus has no usable dates.
   examDate      DateTime?
   minutesPerDay Int            @default(60)
+  /// First day of classes, parsed in code from the syllabus. Resolves "Week 6".
+  termStart     DateTime?      @db.Date
+  /// Null until a schedule has been attempted.
+  planStatus    PlanStatus?
+  plannedAt     DateTime?
+  lateConcepts  Int            @default(0)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   documents     Document[]
@@ -168,6 +174,13 @@ model Course {
   schedule      ScheduleItem[]
 
   @@index([workspaceId])
+}
+
+/// NO_DATES: nothing in the documents or settings anchors a schedule — the
+/// course page asks for an exam date instead of inventing one.
+enum PlanStatus {
+  OK
+  NO_DATES
 }
 
 enum DocumentKind {
@@ -186,8 +199,9 @@ model Document {
   blobPathname  String
   mimeType      String
   sizeBytes     Int
-  /// Content hash — the LLM cache key starts here.
-  sha256        String
+  /// Content hash — the LLM cache key starts here. Computed by the ingest job,
+  /// from the stored bytes, never taken from the browser.
+  sha256        String?
   createdAt     DateTime       @default(now())
   jobs          IngestJob[]
   examQuestions ExamQuestion[]
@@ -217,6 +231,10 @@ model IngestJob {
   /// Stable, user-facing failure reason: NOT_A_SYLLABUS, UNREADABLE, NO_DATES, ...
   errorCode    String?
   errorMessage String?
+  /// Which model in the chain answered, or "cache".
+  model        String?
+  /// What validation dropped: dangling edges, cycle edges, duplicates.
+  report       Json?
   startedAt    DateTime?
   finishedAt   DateTime?
   createdAt    DateTime  @default(now())
@@ -235,6 +253,8 @@ model Concept {
   /// The model's stable id ("eigenvalues-eigenvectors"); edges refer to it at
   /// extraction time and are resolved to row ids before insert.
   slug        String
+  /// Order in the syllabus. The scheduler breaks ties with it.
+  position    Int                 @default(0)
   name        String
   summary     String
   sourceRef   String
@@ -403,6 +423,10 @@ model ScheduleItem {
   date        DateTime     @db.Date
   kind        ScheduleKind
   minutes     Int
+  /// Order within the plan; sorts items that share a day.
+  seq         Int          @default(0)
+  deadline    DateTime?    @db.Date
+  lateByDays  Int          @default(0)
 
   @@index([workspaceId, courseId, date])
 }
@@ -428,6 +452,14 @@ model UsageCounter {
   count       Int       @default(0)
 
   @@unique([workspaceId, key])
+}
+
+/// Service-wide counters, e.g. "llm-calls:2026-09-13". Caps how many real model
+/// calls the whole product makes in a day, so a public sign-up page cannot drain
+/// the key. Cache hits never count.
+model GlobalCounter {
+  key   String @id
+  count Int    @default(0)
 }
 
 /// Content-addressed model responses: key = sha256(input bytes, model, prompt,
