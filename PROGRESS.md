@@ -7,30 +7,33 @@ Deadline **Sept 15, 11:00 PM EDT**. Target submission **Sept 15, 6:00 PM IST**.
 
 ---
 
-## Start here — where we stopped (end of Sept 11)
+## Start here — where we stopped (Sept 13)
 
-**Gate 0 is not passed yet.** The app is deployed but every page returns 500 because there is no
-database. Code, tests and CI are green; the blockers are two account steps only a human can do.
+**The live site is up** (home/sign-up/sign-in 200, dashboard 307 to sign-in, status API 401).
+Gates 1+2 code is written, committed (`efa8851`) and CI green. Nothing has been tested end to end yet.
+
+Done Sept 13: Neon (`--plan free_v3`), all tables pushed; private Blob store `syllabus-arrow-blob`;
+`GMAIL_APP_PASSWORD` in prod + preview; Gates 1+2 (model chain + Postgres cache + daily cap, 5-step
+Inngest ingest, validator, date parser, scheduler, course / map / schedule pages).
+
+Fixed Sept 13: every page was 500 because `BETTER_AUTH_URL` (set Sept 11 from PowerShell) started with
+a BOM. `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET` and `SYLLABUS_GEMINI_KEY` were re-added from Git Bash.
+**Set env values from Bash only.**
 
 ### Next, in order
 
-1. **Human:** accept Neon's marketplace terms in the browser (Vercel → the project's team →
-   Integrations → Neon). The CLI cannot do this step.
-2. Install free Neon: `npx vercel integration add neon --plan free --name syllabus-arrow-db --no-env-pull`.
-   Pull env into a **separate** file (`npx vercel env pull .env.vercel.local`), copy the database URLs
-   into `.env.local`, run `npm run db:push`, then push to `main` to redeploy.
-3. **Human:** create a Gmail app password (2-Step Verification required). Set `GMAIL_USER` and
-   `GMAIL_APP_PASSWORD` in Vercel for production and preview.
-4. **Gate 0 phone test** on the live URL: sign up → verification email arrives → dashboard shows
-   "0 of 1 courses" → adding a second course shows the Free limit → a second account sees nothing of
-   the first.
-5. Remaining setup: Vercel Blob (private), Inngest integration, Google OAuth client (publish the app),
-   Polar sandbox product "Pro" $8/month + access token, Tin Computer credits, Devpost draft.
-6. **Gates 1+2:** model provider with a fallback chain + Postgres cache, Blob upload behind the plan
-   limit, Inngest ingest job with real step progress, validated graph persisted, React Flow graph page,
-   scheduler, honest no-dates / wrong-format states.
-
-The schedule has slipped about half a day: finishing Gate 0 and Gates 1+2 both fall on Sept 12.
+1. **Human:** decide the sender address for verification email — personal Gmail, a separate Gmail
+   made for the app, or a domain + Resend. Then set `GMAIL_USER` (+ matching app password).
+2. **Human:** accept Inngest's marketplace terms, then
+   `npx vercel integration add inngest --name syllabus-arrow-inngest`. Until then uploads fail with
+   `WORKER_UNAVAILABLE`.
+3. End-to-end on the live URL: upload MIT 18.06 → steps progress → map renders → schedule. NIT scheme →
+   no-dates state. A .docx → PDF-only message.
+4. **Gate 0 phone test:** sign up → verification email → "0 of 1 courses" → Free limit on course 2 →
+   a second account sees nothing of the first.
+5. Remaining setup: Google OAuth client (publish the app), Polar sandbox "Pro" $8/month + token,
+   Tin Computer credits, Devpost draft.
+6. Gate 3 (checks → BKT → insight, past papers), Gate 4, Gate 5.
 
 ### Gates
 
