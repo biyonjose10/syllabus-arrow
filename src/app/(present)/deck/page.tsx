@@ -138,7 +138,11 @@ export default function DeckPage() {
       {/* 7 — architecture */}
       <Slide n={7}>
         <H>Architecture</H>
-        <div className="mt-[3%] grid flex-1 grid-cols-4 gap-[1vw] pb-[5%]">
+        <Lead>
+          Every page passes a session check and the tenancy layer. Every model call passes a content-addressed cache and a
+          daily cap. Everything slow happens in memoised background steps.
+        </Lead>
+        <div className="mt-auto mb-[5%] grid grid-cols-4 gap-[1vw]">
           <div className="flex flex-col gap-[1vw]">
             <Box title="Next.js 16 on Vercel" body="Server components, route handlers, server actions." />
             <Box title="Better Auth" body="Email + required verification, Google. Session checked on every page." />
