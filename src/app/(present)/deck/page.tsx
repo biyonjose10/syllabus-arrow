@@ -73,6 +73,11 @@ export default function DeckPage() {
       <Slide n={2}>
         <H>Every student gets a syllabus in week one and a panic in week eleven.</H>
         <Lead>A syllabus says when topics are taught. It never says what depends on what — so students plan by the calendar, and find the gaps when the exam does.</Lead>
+        <p className="mt-[1.5%] max-w-[85%] text-[1.35vw] leading-snug text-ink-2 print:text-[14pt]">
+          <span className="font-semibold text-ink">Who it&apos;s for:</span> university and senior-school students taking a
+          course with a written syllabus and a final exam, especially in subjects where topics build on each other —
+          maths, physics, engineering, computer science.
+        </p>
         <div className="mt-auto mb-[4%] grid grid-cols-3 gap-[1.5vw]">
           <Box title="Calendars, not prerequisites" body="“Week 6: eigenvectors.” Nothing says you can't do PCA, SVD or diagonalisation without them." />
           <Box title="Self-assessment is optimistic" body="Ticking a topic “done” after reading it feels like knowing it. The first honest test is usually the exam." />
@@ -165,6 +170,11 @@ export default function DeckPage() {
       {/* 8 — SaaS */}
       <Slide n={8}>
         <H>A real SaaS, not a demo wearing one.</H>
+        <p className="mt-[1.5%] max-w-[85%] text-[1.35vw] leading-snug text-ink-2 print:text-[14pt]">
+          <span className="font-semibold text-ink">Impact:</span> a shaky foundation shows up in week three, while there is
+          time to fix it — not on the exam. A student gets a prerequisite-ordered plan in minutes instead of building one by
+          hand, and Free is enough for a whole course.
+        </p>
         <div className="mt-auto mb-[4%] grid grid-cols-3 gap-[1.5vw]">
           <Box
             title={`Free — $0`}
