@@ -1,4 +1,4 @@
-import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth";
+import { checkout, polar, portal } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
@@ -6,7 +6,7 @@ import { nextCookies } from "better-auth/next-js";
 
 import { prismaUnsafe } from "./db";
 import { sendEmail, verificationEmail } from "./email";
-import { applySubscription, ensurePersonalWorkspace } from "./tenancy";
+import { ensurePersonalWorkspace } from "./tenancy";
 
 /**
  * Authentication.
@@ -28,34 +28,9 @@ export const googleEnabled = Boolean(googleClientId && googleClientSecret);
 
 const polarToken = process.env.POLAR_ACCESS_TOKEN;
 const polarProductId = process.env.POLAR_PRO_PRODUCT_ID;
-const polarWebhookSecret = process.env.POLAR_WEBHOOK_SECRET;
 export const billingEnabled = Boolean(polarToken && polarProductId);
 
-type SubscriptionPayload = {
-  data: {
-    id: string;
-    status: string;
-    currentPeriodEnd?: Date | null;
-    endedAt?: Date | null;
-    customer: { externalId?: string | null };
-  };
-};
-
-/**
- * Every subscription event funnels here. Polar holds the Better Auth user id
- * as the customer's external id, so no mapping table is needed.
- */
-async function onSubscription(payload: SubscriptionPayload) {
-  const s = payload.data;
-  const userId = s.customer.externalId;
-  if (!userId) return;
-  await applySubscription(userId, {
-    id: s.id,
-    status: s.status,
-    currentPeriodEnd: s.currentPeriodEnd ?? null,
-    endedAt: s.endedAt ?? null,
-  });
-}
+// Subscription webhooks are handled by src/app/api/polar/webhooks/route.ts.
 
 const billingPlugins = billingEnabled
   ? [
@@ -75,19 +50,6 @@ const billingPlugins = billingEnabled
             authenticatedUsersOnly: true,
           }),
           portal(),
-          ...(polarWebhookSecret
-            ? [
-                webhooks({
-                  secret: polarWebhookSecret,
-                  onSubscriptionCreated: onSubscription,
-                  onSubscriptionActive: onSubscription,
-                  onSubscriptionUpdated: onSubscription,
-                  onSubscriptionCanceled: onSubscription,
-                  onSubscriptionUncanceled: onSubscription,
-                  onSubscriptionRevoked: onSubscription,
-                }),
-              ]
-            : []),
         ],
       }),
     ]
