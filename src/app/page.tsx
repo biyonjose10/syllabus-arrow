@@ -90,6 +90,16 @@ export default async function Home({ searchParams }: PageProps<"/">) {
           </p>
         </div>
       </section>
+
+      <footer className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line py-6 text-sm text-ink-3">
+        <span>Syllabus→ · AI Builders Hackathon 2026</span>
+        <Link href="/privacy" className="underline-offset-4 hover:underline">
+          Privacy
+        </Link>
+        <Link href="/terms" className="underline-offset-4 hover:underline">
+          Terms
+        </Link>
+      </footer>
     </main>
   );
 }
